@@ -1,10 +1,11 @@
 const bcrypt = require('bcryptjs');
 
 class User {
-	constructor(name, email, password) {
+	constructor(name, email, password, status = 'user') {
 		this.name = name;
 		this.email = email;
 		this.password = password;
+		this.status = status;
 	}
 
 	async hashPassword() {
@@ -15,9 +16,8 @@ class User {
 	}
 
 	async save(db) {
-		const { name, email, password } = this;
-		const status = 'user',
-			completedTasks = [];
+		const { name, email, password, status } = this;
+		const completedTasks = [];
 
 		const res = await db
 			.collection('users')
@@ -27,7 +27,8 @@ class User {
 	}
 
 	static async checkUser(email, password, db) {
-		const errors = {};
+		let error = '';
+		let resStatus;
 
 		// Get user by email
 		try {
@@ -39,20 +40,23 @@ class User {
 
 				if (match) {
 					// Passwords match
-					return [true, null];
+					return [true, null, 200];
 				} else {
-					errors.msg = 'Неверные данные авторизации';
+					error = 'Неверные данные авторизации';
+					resStatus = 400;
 				}
 			} else {
 				// No user
-				errors.msg = 'Неверные данные авторизации';
+				error = 'Неверные данные авторизации';
+				resStatus = 400;
 			}
 		} catch (err) {
 			// Server error
-			errors.msg = 'Произошла ошибка во время проверки пользователя';
+			error = 'Произошла ошибка на стороне сервера';
+			resStatus = 500;
 		}
 
-		return [false, errors];
+		return [false, error, resStatus];
 	}
 
 	static async getUserByEmail(email, db) {

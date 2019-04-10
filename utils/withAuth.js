@@ -9,10 +9,8 @@ function withAuth(req, res, next) {
 		res.status(401).json({ msg: 'Unauthorized: no token provided' });
 	} else {
 		// Check if token is valid
-		jwt.verify(token, process.env.SECRET, { expiresIn: '1d' }, function(
-			err,
-			decoded
-		) {
+		const options = { issuer: 'pycademy-api' };
+		jwt.verify(token, process.env.SECRET, options, function(err, decoded) {
 			if (err) {
 				// Token expired or invalid
 				res.status(401).json({ msg: 'Unauthorized: invalid token' });
