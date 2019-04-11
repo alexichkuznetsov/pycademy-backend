@@ -1,4 +1,5 @@
 const { ObjectID } = require('mongodb');
+const executeCode = require('../helpers/executeCode');
 
 module.exports = {
 	async getTasks(req, res) {
@@ -111,6 +112,10 @@ module.exports = {
 	},
 
 	checkTask(req, res) {
-		res.status(200).send('Check task route');
+		const { code } = req.body;
+
+		executeCode(code, function(err, data) {
+			return res.status(200).json({ err, data });
+		});
 	}
 };
