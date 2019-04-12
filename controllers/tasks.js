@@ -112,10 +112,60 @@ module.exports = {
 	},
 
 	checkTask(req, res) {
-		const { code } = req.body;
+		const { code, id } = req.body;
+		const { db } = req.app.locals;
+		const { decoded } = req;
 
-		executeCode(code, function(err, data) {
-			return res.status(200).json({ err, data });
-		});
+		db.collection('tasks')
+			.findOne({ _id: new ObjectID(id) })
+			.then(task => {
+				if (!task) {
+					return res.status(404).send('Task not found');
+				}
+
+				executeCode(code, function(err, data) {
+					let check = false;
+
+					if (typeof task.solution === 'object') {
+						// Task solution check for arrays
+						let dataArr = data.replace(/\[|\]|\s|'/g, '').split(',');
+						userSolutionString = JSON.stringify(dataArr);
+
+						const taskSolutionString = JSON.stringify(task.solution);
+
+						check = userSolutionString === taskSolutionString;
+					} else {
+						// Task solution for strings
+						let userSolution = data.replace(/\n/, '').replace(/\r/, '');
+
+						check = userSolution === task.solution;
+					}
+
+					if (check) {
+						db.collection('users')
+							.findOne({ _id: new ObjectID(decoded.id) })
+							.then(user => {
+								if (!user) {
+									res.status(400).send('User not found');
+								} else {
+									// Check if tasks is already in the array
+									if (!user.completedTasks.includes(id)) {
+										db.collection('users').updateOne(
+											{ _id: new ObjectID(decoded.id) },
+											{
+												$push: {
+													completedTasks: id
+												}
+											}
+										);
+									}
+								}
+							});
+					}
+
+					res.status(200).json({ err, data, check });
+				});
+			})
+			.catch(err => res.status(500).send('Internal server error'));
 	}
 };
