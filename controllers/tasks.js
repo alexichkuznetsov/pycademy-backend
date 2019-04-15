@@ -48,6 +48,28 @@ module.exports = {
 				.findOne({ _id: new ObjectID(id) });
 
 			if (task) {
+				const users = await db
+					.collection('users')
+					.find({})
+					.toArray();
+
+				users.forEach(user => {
+					if (user.completedTasks.includes(id)) {
+						const completedTasks = user.completedTasks.filter(
+							task => task !== id
+						);
+
+						db.collection('users').updateOne(
+							{ _id: new ObjectID(user._id) },
+							{
+								$set: {
+									completedTasks: completedTasks
+								}
+							}
+						);
+					}
+				});
+
 				const deleteRes = await db
 					.collection('tasks')
 					.deleteOne({ _id: new ObjectID(id) });
@@ -126,19 +148,21 @@ module.exports = {
 				executeCode(code, function(err, data) {
 					let check = false;
 
-					if (typeof task.solution === 'object') {
-						// Task solution check for arrays
-						let dataArr = data.replace(/\[|\]|\s|'/g, '').split(',');
-						userSolutionString = JSON.stringify(dataArr);
+					if (!err) {
+						if (typeof task.solution === 'object') {
+							// Task solution check for arrays
+							let dataArr = data.replace(/\[|\]|\s|'/g, '').split(',');
+							userSolutionString = JSON.stringify(dataArr);
 
-						const taskSolutionString = JSON.stringify(task.solution);
+							const taskSolutionString = JSON.stringify(task.solution);
 
-						check = userSolutionString === taskSolutionString;
-					} else {
-						// Task solution for strings
-						let userSolution = data.replace(/\n/, '').replace(/\r/, '');
+							check = userSolutionString === taskSolutionString;
+						} else {
+							// Task solution for strings
+							let userSolution = data.replace(/\n/, '').replace(/\r/, '');
 
-						check = userSolution === task.solution;
+							check = userSolution === task.solution;
+						}
 					}
 
 					if (check) {
