@@ -4,7 +4,8 @@ const {
 	getTaskById,
 	deleteTaskById,
 	createTask,
-	checkTask
+	checkTask,
+	runCode
 } = require('../../controllers/tasks');
 
 const withAuth = require('../../utils/withAuth');
@@ -36,5 +37,10 @@ router.post('/', withAuth, stuffRequired, createTask);
 // @private user-only
 // Check task
 router.post('/check', withAuth, checkTask);
+
+// @route
+// @private user-only
+// Execute code submitted by user
+router.post('/execute', withAuth, runCode);
 
 module.exports = router;

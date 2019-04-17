@@ -1,5 +1,6 @@
 const { ObjectID } = require('mongodb');
 const executeCode = require('../helpers/executeCode');
+const checkTask = require('../helpers/checkTask');
 
 module.exports = {
 	async getTasks(req, res) {
@@ -89,7 +90,16 @@ module.exports = {
 
 	async createTask(req, res) {
 		const { db } = req.app.locals;
-		const { title, description, difficulty, solution, codeSnippet } = req.body;
+		const {
+			title,
+			description,
+			difficulty,
+			solution,
+			mainURL,
+			codeSnippet,
+			additionalSolution,
+			additionalURL
+		} = req.body;
 
 		// Validation
 		const errors = {};
@@ -103,6 +113,14 @@ module.exports = {
 		if (!difficulty)
 			errors.difficulty = 'У задания должна быть задана сложность';
 		if (!solution) errors.solution = 'Ответ задания не может быть пустым';
+		if (!mainURL)
+			errors.mainURL = 'Ссылка для решения задания не может быть пустой';
+		if (!additionalSolution)
+			errors.additionalSolution =
+				'У задания должна быть дополнительная проверка';
+		if (!additionalURL)
+			errors.additionalURL =
+				'У задания должен быть URL для дополнительной проверки';
 
 		if (!Object.keys(errors).length) {
 			// No errors
@@ -111,7 +129,10 @@ module.exports = {
 				description,
 				difficulty,
 				solution,
+				mainURL,
 				codeSnippet,
+				additionalSolution,
+				additionalURL,
 				createdAt: new Date()
 			};
 
@@ -133,63 +154,91 @@ module.exports = {
 		}
 	},
 
-	checkTask(req, res) {
+	runCode(req, res) {
+		const { code } = req.body;
+
+		executeCode(code, (err, data) => res.status(200).json({ err, data }));
+	},
+
+	async checkTask(req, res) {
 		const { code, id } = req.body;
 		const { db } = req.app.locals;
 		const { decoded } = req;
 
-		db.collection('tasks')
-			.findOne({ _id: new ObjectID(id) })
-			.then(task => {
-				if (!task) {
-					return res.status(404).send('Task not found');
-				}
+		// Get task from db
+		const task = await db
+			.collection('tasks')
+			.findOne({ _id: new ObjectID(id) });
 
-				executeCode(code, function(err, data) {
-					let check = false;
+		if (!task) {
+			return res.status(404).send('Task not found');
+		}
 
-					if (!err) {
-						if (typeof task.solution === 'object') {
-							// Task solution check for arrays
-							let dataArr = data.replace(/\[|\]|\s|'/g, '').split(',');
-							userSolutionString = JSON.stringify(dataArr);
+		const codeForAdditionalCheck = code.replace(
+			/url\s?=\s?'.*'/,
+			`url = '${task.additionalURL}'`
+		);
 
-							const taskSolutionString = JSON.stringify(task.solution);
+		// Execute user code
+		executeCode(code, (err, data) => {
+			let check = false;
 
-							check = userSolutionString === taskSolutionString;
+			if (err) {
+				return res
+					.status(200)
+					.json({ check: false, msg: 'Задание выполнено неверно' });
+			} else {
+				check = checkTask(task.solution, data);
+			}
+
+			// Execute user code for an additional check
+			executeCode(
+				codeForAdditionalCheck,
+				async (additionalCheckError, additionalCheckCodeResult) => {
+					let additionalCheck = false;
+
+					if (additionalCheckError) {
+						return res
+							.status(200)
+							.json({ check: false, msg: 'Задание выполнено неверно' });
+					} else {
+						additionalCheck = checkTask(
+							task.additionalSolution,
+							additionalCheckCodeResult
+						);
+					}
+
+					// If task is correct
+					if (check && additionalCheck) {
+						const user = await db
+							.collection('users')
+							.findOne({ _id: new ObjectID(decoded.id) });
+
+						if (!user) {
+							return res.status(404).send('User not found');
 						} else {
-							// Task solution for strings
-							let userSolution = data.replace(/\n/, '').replace(/\r/, '');
-
-							check = userSolution === task.solution;
-						}
-					}
-
-					if (check) {
-						db.collection('users')
-							.findOne({ _id: new ObjectID(decoded.id) })
-							.then(user => {
-								if (!user) {
-									res.status(400).send('User not found');
-								} else {
-									// Check if tasks is already in the array
-									if (!user.completedTasks.includes(id)) {
-										db.collection('users').updateOne(
-											{ _id: new ObjectID(decoded.id) },
-											{
-												$push: {
-													completedTasks: id
-												}
-											}
-										);
+							// Check if task is already in completed tasks
+							if (!user.completedTasks.includes(id)) {
+								await db.collection('users').updateOne(
+									{ _id: new ObjectID(decoded.id) },
+									{
+										$push: {
+											completedTasks: id
+										}
 									}
-								}
-							});
+								);
+							}
+							return res
+								.status(200)
+								.json({ check: true, msg: 'Задание выполнено успешно' });
+						}
+					} else {
+						return res
+							.status(200)
+							.json({ check: false, msg: 'Задание выполнено неверно' });
 					}
-
-					res.status(200).json({ err, data, check });
-				});
-			})
-			.catch(err => res.status(500).send('Internal server error'));
+				}
+			);
+		});
 	}
 };
