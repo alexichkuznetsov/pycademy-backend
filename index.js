@@ -19,6 +19,7 @@ app.use(cors());
 // Routes
 app.use('/api/auth', require('./routes/api/auth'));
 app.use('/api/tasks', require('./routes/api/tasks'));
+app.use('/api/users', require('./routes/api/users'));
 
 // Start server
 app.listen(port, async () => {
